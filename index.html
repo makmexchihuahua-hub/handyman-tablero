@@ -1043,7 +1043,7 @@ function czPdf() {
 })();
 
 
-/* =============== ventas en rojo (reglas del carrito de makmex.com) + historial =============== */
+/* =============== ventas en rojo (reglas del carrito de la página) + historial =============== */
 const RTOL = 10;                                   // tolerancia en pesos por venta
 const RGO = {AA: 0, A: 1, B: 2, C: 3, D: 4, E: 5, F: 6};
 const RKIT_CHG = [["48-59-1812","48-59-1808","48-59-1802","48-59-1806","48-59-1807","48-59-1809","48-59-1811"],
@@ -1064,7 +1064,7 @@ const rLlaveRango = () => RANGO.de + "|" + RANGO.a;
 const rLlave = v => "r" + v.suc + ":" + v.ven_id + ":" + Math.round(Number(v.total));
 const rRojo = v => (v.status === 1 && D.rojo[rLlave(v)]) || null;
 const rClase = v => rRojo(v) ? " roja" : "";
-const rEtiq = v => { const r = rRojo(v); return r ? '<span class="etq rojo" title="Cobrada por debajo del mínimo que permite el carrito de makmex.com">desc. de más ' + pesos(r.exceso) + '</span>' : ""; };
+const rEtiq = v => { const r = rRojo(v); return r ? '<span class="etq rojo" title="Cobrada por debajo del mínimo que permite el carrito de la página">desc. de más ' + pesos(r.exceso) + '</span>' : ""; };
 
 async function rLee(tabla, parametros) {
   const todo = [];
@@ -1083,14 +1083,14 @@ function rConsultaVentas() {
     .catch(e => { if (!sinCliente && /cli_id/.test(e.message)) { sinCliente = true; return rLee("sicar_venta", sel + filtro); } throw e; });
 }
 
-/* ---- reglas del carrito: core.json + combos.json + grados.json de makmex.com ---- */
+/* ---- reglas del carrito: core.json + combos.json + grados.json del sitio ---- */
 async function cargarReglas() {
   if (R.listo) return 1;
   if (R.intento && Date.now() - R.intento < 10 * 60 * 1000) return 0;   // reintenta cada 10 min
   R.intento = Date.now();
   try {
     const [core, combos, grados] = await Promise.all(["core.json", "combos.json", "grados.json"].map(a =>
-      fetch("https://makmex.com/" + a, {cache: "no-cache"}).then(r => { if (!r.ok) throw new Error(a); return r.json(); })));
+      fetch("" + SITIO + "/" + a, {cache: "no-cache"}).then(r => { if (!r.ok) throw new Error(a); return r.json(); })));
     const idx = {}; core.cols.forEach((k, i) => idx[k] = i);
     R.cat = {};
     for (const f of core.rows) {
@@ -1219,7 +1219,7 @@ function rCajon(v, det) {                 // renglón del cajón de la venta
   const exceso = Math.round(r.permitido - Number(v.total));
   let h = '<div class="kv"><span class="k">Mínimo del carrito</span><span class="v num">' + pesosC(r.permitido) + '</span></div>';
   if (r.notas.length) h += '<div class="sub" style="margin:2px 0 8px">Reconocido: ' + esc(r.notas.join(" · ")) + '</div>';
-  if (exceso > RTOL) h += '<div class="aviso bad" style="margin:8px 0">Descuento de más: ' + pesosC(exceso) + ' por debajo del mínimo que permite el carrito de makmex.com. Habla con el vendedor.</div>';
+  if (exceso > RTOL) h += '<div class="aviso bad" style="margin:8px 0">Descuento de más: ' + pesosC(exceso) + ' por debajo del mínimo que permite el carrito de la página. Habla con el vendedor.</div>';
   return h;
 }
 
