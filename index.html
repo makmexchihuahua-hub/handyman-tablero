@@ -457,6 +457,7 @@ function arrancar() {
   aplicarTema(); $("#fechaHoy").textContent = new Date().toLocaleDateString("es-MX", {weekday: "long", day: "numeric", month: "long"});
   reloj(); setInterval(reloj, 1000);
   cargarFotos();
+  if (INV) { if (INV.nube) invRevisarNube(); else invSubir(false); } else { INV_LISTA = null; pintarInventario(); }
   refrescar(true);
   clearInterval(temporizador); temporizador = setInterval(() => refrescar(false), CADA_S * 1000);
   document.addEventListener("visibilitychange", async () => { if (!document.hidden && !(await revisarInactividad()) && sesion) refrescar(false); });
@@ -657,12 +658,29 @@ function cerrarCajon() { $("#velo").classList.remove("abierto"); $("#cajon").cla
 $("#velo").addEventListener("click", cerrarCajon); $("#btnCerrar").addEventListener("click", cerrarCajon);
 document.addEventListener("keydown", e => { if (e.key === "Escape") cerrarCajon(); });
 
-/* ---------------- hacer inventario (conteo físico con el escáner de la tienda) ---------------- */
+/* ---------------- hacer inventario (conteo físico con el escáner · avance y resultados en la base central) ---------------- */
+/* Avance a medias: handyman.inventario_borrador (se sigue desde otro dispositivo) + copia en este navegador por si se va
+   el internet. Terminados: handyman.inventario (para siempre; se ven desde cualquier navegador donde entres). */
 const INV_LLAVE = "inventarioHM";
-let INV = null;        // {inicio, items: {CLAVE: {n, desc}}, orden: [claves, lo más reciente primero]}
+let INV = null;        // {id, inicio, items: {CLAVE: {n, desc}}, orden: [], nube}
 let INV_DESC = null;   // clave → descripción (solo para mostrar el nombre; no se compara contra el sistema)
-function invGuardar() { try { localStorage.setItem(INV_LLAVE, JSON.stringify(INV)); } catch (e) {} }
-function invGuardado() { try { return JSON.parse(localStorage.getItem(INV_LLAVE) || "null"); } catch (e) { return null; } }
+let INV_VISTA = null;  // inventario terminado en pantalla: {id, inicio, fin, correo, items}
+let INV_LISTA = null;  // {borradores, historial, mas, cargando, error}
+const INV_ST = {estado: "", hora: null, timer: null, subiendo: false, otra: null};
+const invDisp = (() => { try { let d = localStorage.getItem("invDisp"); if (!d) { d = "d" + Math.random().toString(36).slice(2, 12); localStorage.setItem("invDisp", d); } return d; } catch (e) { return "d" + Math.random().toString(36).slice(2, 12); } })();
+const invNuevoId = () => "hm" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function invGuardarLocal() { try { if (INV) localStorage.setItem(INV_LLAVE, JSON.stringify(INV)); else localStorage.removeItem(INV_LLAVE); } catch (e) {} }
+function invLocal() { try { const x = JSON.parse(localStorage.getItem(INV_LLAVE) || "null"); return x && x.items ? x : null; } catch (e) { return null; } }
+const invPz = n => n + (n === 1 ? " pieza" : " piezas"), invCl = n => n + (n === 1 ? " clave" : " claves");
+const invFecha = (t) => new Date(t).toLocaleString("es-MX", {day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"});
+async function hmRpc(fn, args) {
+  const r = await fetch(URL_BASE + "/rest/v1/rpc/" + fn, {method: "POST", headers: {apikey: LLAVE, Authorization: "Bearer " + (sesion ? sesion.access_token : LLAVE),
+    "Content-Type": "application/json", "Content-Profile": "handyman", "Accept-Profile": "handyman"}, body: JSON.stringify(args || {})});
+  if (r.status === 401 || r.status === 403) throw new Error("sesion");
+  const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+  if (!r.ok) throw new Error((j && (j.message || j.hint)) || (fn + ": HTTP " + r.status));
+  return j;
+}
 async function invDescripciones() {
   if (INV_DESC) return;
   INV_DESC = {};
@@ -678,13 +696,54 @@ function invBip(bueno) {
     o.start(); o.stop(invAudio.currentTime + (bueno ? 0.09 : 0.3));
   } catch (e) {}
 }
-function invTotales() {
-  const claves = Object.keys(INV ? INV.items : {});
-  return {claves: claves.length, piezas: claves.reduce((a, c) => a + INV.items[c].n, 0)};
+function invTotales(items) {
+  const x = items || (INV ? INV.items : {}); const claves = Object.keys(x);
+  return {claves: claves.length, piezas: claves.reduce((a, c) => a + x[c].n, 0)};
 }
+function invProgramarSubida(ya) { clearTimeout(INV_ST.timer); INV_ST.timer = setTimeout(invSubir, ya ? 0 : 1500); }
+async function invSubir(tomar) {
+  if (!INV || INV_ST.otra) return;
+  if (INV_ST.subiendo) { invProgramarSubida(); return; }
+  INV_ST.subiendo = true;
+  try {
+    const r = await hmRpc("inventario_borrador_guardar", {p_id: INV.id, p_inicio: new Date(INV.inicio).toISOString(),
+      p_datos: {items: INV.items, orden: INV.orden}, p_disp: invDisp, p_tomar: !!tomar});
+    if (r && r.ok) { INV.nube = true; INV_ST.estado = "ok"; INV_ST.hora = Date.now(); invGuardarLocal(); }
+    else if (r && r.error === "otro_dispositivo") { INV_ST.otra = {usuario: r.usuario}; INV_ST.estado = "otra"; }
+    else if (r && r.error === "cerrado") { INV_ST.otra = {cerrado: r.como, inv: r.inv_id}; INV_ST.estado = "otra"; }
+    else { INV_ST.estado = "error"; INV_ST.msg = (r && r.error) || "no se guardó"; }
+  } catch (e) { INV_ST.estado = navigator.onLine === false ? "sinred" : "error"; INV_ST.msg = e.message; }
+  finally { INV_ST.subiendo = false; }
+  invPintarNube();
+  if (INV_ST.otra) pintarInventario();
+}
+// al entrar con una copia de este navegador: ¿sigue en curso en la nube y le toca a este dispositivo?
+// (solo lee; no pide PIN). Si ya se terminó / descartó o lo tomó otro dispositivo, se avisa antes de seguir contando.
+async function invRevisarNube() {
+  if (!INV || !INV.nube || INV_ST.otra) return;
+  try {
+    const f = (await q("inventario_borrador", "select=id,disp,correo&id=eq." + encodeURIComponent(INV.id)))[0];
+    if (!INV || INV_ST.otra) return;
+    if (!f) INV_ST.otra = {cerrado: "fuera"};
+    else if (f.disp !== invDisp) INV_ST.otra = {usuario: f.correo || ""};
+    else return;
+    INV_ST.estado = "otra"; pintarInventario();
+  } catch (e) {}
+}
+function invPintarNube() {
+  const el = $("#invNube"); if (!el) return;
+  const s = INV_ST.estado;
+  el.style.color = s === "ok" ? "var(--ok)" : s === "" ? "var(--ink-3)" : "var(--warn)";
+  el.textContent = s === "ok" ? "☁ Avance guardado en la nube · " + new Date(INV_ST.hora).toLocaleTimeString("es-MX", {hour: "2-digit", minute: "2-digit", second: "2-digit"}) + " · se puede seguir desde otro dispositivo"
+    : s === "sinred" ? "⚠ Sin internet: el avance está guardado en este navegador y se sube solo al volver la conexión"
+    : s === "error" ? "⚠ No se pudo subir a la nube (" + (INV_ST.msg || "") + "); el avance sigue guardado en este navegador. Se reintenta solo."
+    : (INV && !INV.nube ? "Este avance todavía está solo en este navegador; se está subiendo a la nube…" : "Guardando en la nube…");
+  if (s === "sinred" || s === "error") invProgramarSubida();
+}
+window.addEventListener("online", () => { if (INV && !INV_ST.otra) invProgramarSubida(true); });
 function invSumar(clave, delta, esEscaneo) {
   const c = (clave || "").trim().toUpperCase();
-  if (!c || !INV) return;
+  if (!c || !INV || INV_ST.otra) return;
   const it = INV.items[c];
   if (delta > 0) {
     if (it) it.n += delta; else INV.items[c] = {n: delta, desc: (INV_DESC && INV_DESC[c]) || ""};
@@ -693,40 +752,105 @@ function invSumar(clave, delta, esEscaneo) {
     it.n += delta;
     if (it.n <= 0) { delete INV.items[c]; INV.orden = INV.orden.filter(x => x !== c); }
   }
-  invGuardar();
+  invGuardarLocal(); invProgramarSubida();
   const conocida = !INV_DESC || INV_DESC[c] !== undefined;
   if (esEscaneo) invBip(conocida);
   pintarInventario(esEscaneo ? c : null);
   if (esEscaneo) invFoco();   // el cursor regresa a la casilla: el siguiente escaneo entra directo
   if (esEscaneo && !conocida) { const a = $("#invAviso"); if (a) { a.textContent = c + ": esta clave no está en el inventario del sistema; se contó de todas formas. Revisa que el escaneo haya salido bien."; a.classList.add("raro"); } }
 }
+async function invCargarLista(mas) {
+  INV_LISTA = INV_LISTA || {borradores: [], historial: [], mas: false};
+  INV_LISTA.cargando = true;
+  try {
+    const desde = mas ? INV_LISTA.historial.length : 0;
+    const [b, h] = await Promise.all([
+      mas ? Promise.resolve(INV_LISTA.borradores) : q("inventario_borrador", "select=id,inicio,claves,piezas,disp,correo,actualizado&order=actualizado.desc"),
+      q("inventario", "select=id,inicio,fin,correo,claves,piezas&order=fin.desc&limit=26&offset=" + desde, {unaPagina: true})]);
+    INV_LISTA.borradores = b;
+    INV_LISTA.historial = (mas ? INV_LISTA.historial : []).concat(h.slice(0, 25));
+    INV_LISTA.mas = h.length > 25; INV_LISTA.error = null;
+  } catch (e) { INV_LISTA.error = e.message === "sesion" ? "La sesión caducó; vuelve a entrar" : e.message; }
+  INV_LISTA.cargando = false;
+  if (!INV && !INV_VISTA) pintarInventario();
+}
 function pintarInventario(claveNueva) {
   const cuerpo = $("#invCuerpo"); if (!cuerpo) return;
-  const guardado = invGuardado();
-  if (!INV) {
-    const t = guardado ? Object.keys(guardado.items || {}).reduce((a, c) => a + guardado.items[c].n, 0) : 0;
-    cuerpo.innerHTML = '<p style="color:var(--ink-2);margin:4px 2px 14px">Conteo físico de la tienda con el escáner de código de barras: escanea la etiqueta de cada pieza, una por una (si hay 2 piezas iguales, se escanea 2 veces). El avance se guarda en este navegador y al final se descarga la hoja en PDF.</p>' +
-      (guardado ? '<button class="invbtn lleno" id="invSeguir">Seguir el inventario guardado · ' + t + ' piezas</button> ' : '') +
-      '<button class="invbtn' + (guardado ? '' : ' lleno') + '" id="invNuevo">Empezar inventario nuevo</button>';
-    $("#invNuevo").addEventListener("click", () => {
-      if (guardado && !confirm("Se borra el inventario guardado (" + t + " piezas) y se empieza de cero. ¿Seguro?")) return;
-      INV = {inicio: Date.now(), items: {}, orden: []};
-      invGuardar(); invDescripciones().then(() => pintarInventario()); pintarInventario(); invFoco();
-    });
-    const sg = $("#invSeguir");
-    if (sg) sg.addEventListener("click", () => { INV = guardado; invDescripciones().then(() => pintarInventario()); pintarInventario(); invFoco(); });
-    $("#invResumen").textContent = guardado ? "hay un inventario a medias guardado" : "";
+  if (INV_VISTA) return invPantallaVista(cuerpo);
+  if (INV) return invPantallaConteo(cuerpo, claveNueva);
+  invPantallaInicio(cuerpo);
+}
+function invPantallaInicio(cuerpo) {
+  if (!sesion) { cuerpo.innerHTML = ""; return; }
+  if (!INV_LISTA) { cuerpo.innerHTML = '<div class="vacio">Cargando inventarios…</div>'; invCargarLista(); return; }
+  const L = INV_LISTA, local = invLocal();
+  const localSuelto = local && !L.borradores.some(b => b.id === local.id) && invTotales(local.items).piezas > 0;
+  $("#invResumen").textContent = L.borradores.length ? (L.borradores.length === 1 ? "hay un inventario en curso" : L.borradores.length + " inventarios en curso") : "";
+  cuerpo.innerHTML = '<p style="color:var(--ink-2);margin:4px 2px 14px">Conteo físico de la tienda con el escáner de código de barras: escanea la etiqueta de cada pieza, una por una (si hay 2 piezas iguales, se escanea 2 veces). <b>El avance se guarda en la nube</b>: si se acaba la batería, se sigue desde otro dispositivo. Al terminar queda guardado para siempre y se ve desde cualquier navegador donde entres.</p>' +
+    (L.error ? '<div class="aviso bad">No se pudieron leer los inventarios: ' + esc(L.error) + '</div>' : '') +
+    (localSuelto ? '<div class="aviso">En este navegador hay un conteo que no se alcanzó a subir (' + invPz(invTotales(local.items).piezas) + '). <button class="invbtn lleno" id="invSeguirLocal" style="margin-left:8px">Seguirlo y subirlo</button></div>' : '') +
+    (L.borradores.length ? L.borradores.map(b =>
+      '<div class="aviso" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span><b>En curso</b> · ' + invPz(b.piezas) + ' · ' + invCl(b.claves) + ' · ' + esc(b.correo || "") + ' · ' + invFecha(b.actualizado) + (b.disp === invDisp ? ' · este dispositivo' : '') + '</span>' +
+      '<span style="margin-left:auto;display:flex;gap:6px"><button class="invbtn lleno" data-seguir="' + esc(b.id) + '">' + (b.disp === invDisp ? 'Seguir el inventario guardado' : 'Seguir aquí') + ' · ' + invPz(b.piezas) + '</button><button class="invbtn rojo" data-descartar="' + esc(b.id) + '">Descartar</button></span></div>').join("") : '') +
+    '<div style="margin:12px 0"><button class="invbtn' + (L.borradores.length ? '' : ' lleno') + '" id="invNuevo">Empezar inventario nuevo</button></div>' +
+    '<h3 style="margin:16px 2px 6px;font-size:15px">Inventarios terminados</h3>' +
+    (L.historial.length ? '<div class="lista">' + L.historial.map(h =>
+      '<div class="invfila" data-ver="' + h.id + '" style="cursor:pointer;grid-template-columns:minmax(0,1fr) auto"><div><div class="k">' + invFecha(h.fin) + '</div><div class="d">' + esc(h.correo || "") + ' · ' + invCl(h.claves) + '</div></div><div class="n num" style="font-size:18px">' + h.piezas + ' pzas ›</div></div>').join("") + '</div>' +
+      (L.mas ? '<button class="invbtn" id="invMas" style="margin-top:8px">Ver más antiguos</button>' : '')
+      : '<div class="vacio">' + (L.cargando ? 'Cargando…' : 'Todavía no hay inventarios terminados.') + '</div>');
+  $("#invNuevo").addEventListener("click", () => {
+    INV = {id: invNuevoId(), inicio: Date.now(), items: {}, orden: [], nube: false};
+    INV_ST.otra = null; INV_ST.estado = "";
+    invGuardarLocal(); invDescripciones().then(() => pintarInventario()); pintarInventario(); invFoco(); invSubir(false);
+  });
+  const sl = $("#invSeguirLocal");
+  if (sl) sl.addEventListener("click", () => invAbrir(local, false));
+  cuerpo.querySelectorAll("[data-seguir]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true;
+    try {
+      const f = (await q("inventario_borrador", "select=id,inicio,datos,disp&id=eq." + encodeURIComponent(b.dataset.seguir)))[0];
+      if (!f) { invCargarLista(); return; }
+      invAbrir({id: f.id, inicio: new Date(f.inicio).getTime(), items: (f.datos && f.datos.items) || {}, orden: (f.datos && f.datos.orden) || [], nube: true}, f.disp !== invDisp);
+    } catch (e) { b.disabled = false; $("#invResumen").textContent = e.message; }
+  }));
+  cuerpo.querySelectorAll("[data-descartar]").forEach(b => b.addEventListener("click", async () => {
+    const bo = INV_LISTA.borradores.find(x => x.id === b.dataset.descartar);
+    if (!confirm("¿Descartar el inventario en curso (" + invPz(bo.piezas) + ")? No se guarda.")) return;
+    try { await hmRpc("inventario_borrador_borrar", {p_id: bo.id}); } catch (e) {}
+    const l = invLocal(); if (l && l.id === bo.id) { try { localStorage.removeItem(INV_LLAVE); } catch (e) {} }
+    INV_LISTA = null; pintarInventario();
+  }));
+  cuerpo.querySelectorAll("[data-ver]").forEach(b => b.addEventListener("click", async () => {
+    try {
+      const f = (await q("inventario", "select=id,inicio,fin,correo,claves,piezas,contado&id=eq." + b.dataset.ver))[0];
+      if (f) { INV_VISTA = {id: f.id, inicio: f.inicio, fin: f.fin, correo: f.correo, items: f.contado || {}}; pintarInventario(); window.scrollTo({top: 0}); }
+    } catch (e) {}
+  }));
+  const mas = $("#invMas"); if (mas) mas.addEventListener("click", () => invCargarLista(true));
+}
+function invAbrir(inv, tomar) {
+  INV = inv; INV_ST.otra = null; INV_ST.estado = ""; INV_VISTA = null;
+  invGuardarLocal(); invDescripciones().then(() => pintarInventario()); pintarInventario(); invFoco();
+  invSubir(tomar);   // reclama el inventario para este dispositivo (y lo sube si estaba solo aquí)
+}
+function invPantallaConteo(cuerpo, claveNueva) {
+  const t = invTotales();
+  $("#invResumen").textContent = t.piezas ? invCl(t.claves) + " · " + invPz(t.piezas) : "";
+  if (INV_ST.otra) {
+    cuerpo.innerHTML = (INV_ST.otra.cerrado
+      ? '<div class="aviso bad">Este inventario ya se <b>' + (INV_ST.otra.cerrado === "terminado" ? 'terminó y guardó' : INV_ST.otra.cerrado === "descartado" ? 'descartó' : 'terminó o descartó') + '</b> en otro dispositivo' + (INV_ST.otra.inv ? ' (inventario #' + INV_ST.otra.inv + ', está en la lista de terminados)' : '') + '. Esta copia ya no se guarda para no duplicarlo.</div>'
+      : '<div class="aviso bad">Este inventario lo siguió <b>otro dispositivo</b>' + (INV_ST.otra.usuario ? ' (' + esc(INV_ST.otra.usuario) + ')' : '') + '. Para no encimar los conteos, aquí ya no se guarda nada más. Si quieres seguir en este dispositivo, dale «Seguir aquí» en la lista.</div>') +
+      '<button class="invbtn lleno" id="invSalirOtra">Volver a la lista de inventarios</button>';
+    $("#invSalirOtra").addEventListener("click", () => { INV = null; INV_ST.otra = null; try { localStorage.removeItem(INV_LLAVE); } catch (e) {} INV_LISTA = null; pintarInventario(); });
     return;
   }
-  const t = invTotales();
-  $("#invResumen").textContent = t.piezas ? t.claves + " claves · " + t.piezas + " piezas" : "";
   cuerpo.innerHTML =
     '<form id="invForm" autocomplete="off"><input id="invClave" placeholder="Escanea una etiqueta…" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done"></form>' +
-    '<div id="invAviso"></div>' +
+    '<div id="invAviso"></div><div id="invNube" style="font-size:12.5px;color:var(--ink-3);margin:0 2px 8px;min-height:18px"></div>' +
     '<div class="marcador" style="grid-template-columns:repeat(2,1fr)">' +
       '<div class="tile num"><div class="n"><span>Claves distintas</span></div><div class="t' + (t.claves ? '' : ' cero') + '">' + t.claves + '</div></div>' +
       '<div class="tile num"><div class="n"><span>Piezas contadas</span></div><div class="t' + (t.piezas ? '' : ' cero') + '">' + t.piezas + '</div><div class="s">desde el ' + new Date(INV.inicio).toLocaleString("es-MX", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}) + '</div></div></div>' +
-    '<div class="barra"><button type="button" class="invbtn lleno" id="invPdf">Hoja PDF del inventario</button><button type="button" class="invbtn rojo" id="invBorrar">Terminar y borrar</button></div>' +
+    '<div class="barra"><button type="button" class="invbtn lleno" id="invTerminar">Terminar y guardar</button><button type="button" class="invbtn" id="invPausa">Pausar (sigue guardado)</button><button type="button" class="invbtn rojo" id="invBorrar">Descartar</button></div>' +
     '<div class="lista" id="invLista">' + (INV.orden.length ? INV.orden.map(c => {
       const it = INV.items[c];
       const raro = INV_DESC && INV_DESC[c] === undefined;
@@ -734,32 +858,63 @@ function pintarInventario(claveNueva) {
         '<div><div class="k">' + esc(c) + '</div><div class="d' + (raro ? ' raro' : '') + '">' + esc(it.desc || (raro ? "clave no registrada en el sistema" : "")) + '</div></div>' +
         '<div class="ops"><button type="button" data-m="' + esc(c) + '" aria-label="Quitar una pieza de ' + esc(c) + '">−</button><span class="n num">' + it.n + '</span><button type="button" data-p="' + esc(c) + '" aria-label="Sumar una pieza de ' + esc(c) + '">+</button></div></div>';
     }).join("") : '<div class="vacio">Todavía no se escanea nada. Escanea la primera etiqueta.</div>') + '</div>';
+  invPintarNube();
   $("#invForm").addEventListener("submit", ev => { ev.preventDefault(); const v = $("#invClave").value; $("#invClave").value = ""; invSumar(v, 1, true); });
-  $("#invPdf").addEventListener("click", pdfInventario);
-  $("#invBorrar").addEventListener("click", () => {
+  $("#invTerminar").addEventListener("click", async () => {
     const tt = invTotales();
-    if (!confirm("¿Terminar el inventario y borrarlo de este navegador? (" + tt.piezas + " piezas en " + tt.claves + " claves). Descarga la hoja PDF ANTES si no lo has hecho.")) return;
-    try { localStorage.removeItem(INV_LLAVE); } catch (e) {}
-    INV = null; pintarInventario();
+    if (!tt.piezas) { alert("Todavía no hay nada contado."); return; }
+    if (!confirm("¿Terminar y guardar el inventario? (" + tt.piezas + " piezas en " + tt.claves + " claves). Queda guardado para siempre.")) return;
+    const bt = $("#invTerminar"); bt.disabled = true; bt.textContent = "Guardando…";
+    clearTimeout(INV_ST.timer);
+    try {
+      const r = await hmRpc("inventario_guardar", {p_borrador: INV.id, p_inicio: new Date(INV.inicio).toISOString(), p_items: INV.items});
+      if (r && r.error === "cerrado") { INV_ST.otra = {cerrado: r.como, inv: r.inv_id}; pintarInventario(); return; }
+      if (!r || !r.ok) { alert((r && r.error) || "No se guardó"); bt.disabled = false; bt.textContent = "Terminar y guardar"; return; }
+      INV_VISTA = {id: r.id, inicio: new Date(INV.inicio).toISOString(), fin: new Date().toISOString(), correo: (sesion && sesion.user && sesion.user.email) || "", items: INV.items, recien: true};
+      INV = null; invGuardarLocal(); INV_LISTA = null; pintarInventario(); window.scrollTo({top: 0});
+    } catch (e) { alert("No se pudo guardar (" + e.message + "). El avance sigue guardado; vuelve a intentar."); bt.disabled = false; bt.textContent = "Terminar y guardar"; }
+  });
+  $("#invPausa").addEventListener("click", async () => {
+    await invSubir();
+    if (INV_ST.estado !== "ok" && !confirm("El avance no se pudo subir a la nube; sigue guardado solo en este navegador. ¿Salir de todos modos?")) return;
+    INV = null; INV_LISTA = null; pintarInventario();
+  });
+  $("#invBorrar").addEventListener("click", async () => {
+    const tt = invTotales();
+    if (!confirm("¿Descartar este inventario? (" + tt.piezas + " piezas en " + tt.claves + " claves). No se guarda.")) return;
+    try { if (INV.nube) await hmRpc("inventario_borrador_borrar", {p_id: INV.id}); } catch (e) {}
+    clearTimeout(INV_ST.timer);
+    INV = null; invGuardarLocal(); INV_LISTA = null; pintarInventario();
   });
   cuerpo.querySelectorAll("[data-p]").forEach(b => b.addEventListener("click", () => invSumar(b.dataset.p, 1, false)));
   cuerpo.querySelectorAll("[data-m]").forEach(b => b.addEventListener("click", () => invSumar(b.dataset.m, -1, false)));
 }
+function invPantallaVista(cuerpo) {
+  const V = INV_VISTA, t = invTotales(V.items);
+  $("#invResumen").textContent = "inventario #" + V.id;
+  cuerpo.innerHTML = '<div class="aviso">' + (V.recien ? '✓ ' : '') + 'Inventario <b>#' + V.id + '</b> guardado en la nube · ' + esc(V.correo || "") + ' · ' + invFecha(V.fin) + '</div>' +
+    '<div class="marcador" style="grid-template-columns:repeat(2,1fr)"><div class="tile num"><div class="n"><span>Claves</span></div><div class="t">' + t.claves + '</div></div>' +
+    '<div class="tile num"><div class="n"><span>Piezas contadas</span></div><div class="t">' + t.piezas + '</div></div></div>' +
+    '<div class="barra"><button type="button" class="invbtn lleno" id="invPdf">Hoja PDF del inventario</button><button type="button" class="invbtn" id="invVolver">Volver a la lista</button></div>' +
+    '<div class="lista">' + Object.keys(V.items).sort().map(c => '<div class="invfila">' + fotoHtml(c) + '<div><div class="k">' + esc(c) + '</div><div class="d">' + esc(V.items[c].desc || "") + '</div></div><div class="n num">' + V.items[c].n + '</div></div>').join("") + '</div>';
+  $("#invPdf").addEventListener("click", pdfInventario);
+  $("#invVolver").addEventListener("click", () => { INV_VISTA = null; INV_LISTA = null; pintarInventario(); });
+}
 function invFoco() { setTimeout(() => { const i = $("#invClave"); if (i) i.focus(); }, 60); }
-document.querySelector('#nav [data-p="inventario"]').addEventListener("click", invFoco);
+document.querySelector('#nav [data-p="inventario"]').addEventListener("click", () => { if (!INV && !INV_VISTA) { INV_LISTA = null; pintarInventario(); } invFoco(); });
 function pdfInventario() {
-  const t = invTotales();
-  if (!t.piezas) { alert("Todavía no hay nada contado."); return; }
+  const V = INV_VISTA; if (!V) return;
+  const t = invTotales(V.items);
   const foto = clave => { const m = /^(.*)-(AA|A|B|C|D|E|F)$/i.exec(clave || "");
     const id = FOTOS.clave[clave] || (m && FOTOS.modelo[m[1]]) || FOTOS.modelo[clave];
     return id ? '<img src="' + SITIO + '/img/' + encodeURIComponent(id) + '.webp" onerror="this.style.visibility=\'hidden\'">' : ''; };
-  const claves = Object.keys(INV.items).sort((a, b) => a.localeCompare(b));
+  const claves = Object.keys(V.items).sort((a, b) => a.localeCompare(b));
   const cuerpo = claves.map((c, i) => '<tr><td class="n num">' + (i + 1) + '</td><td class="f">' + foto(c) +
-    '</td><td><div class="k num">' + esc(c) + '</div><div class="d">' + esc(INV.items[c].desc || "") + '</div></td>' +
-    '<td class="pz num">' + INV.items[c].n + '</td></tr>').join("");
-  const f = new Date(), ff = f.toLocaleDateString("es-MX", {day: "numeric", month: "short"}) + " " + f.toLocaleTimeString("es-MX", {hour: "2-digit", minute: "2-digit"});
-  const fi = new Date(INV.inicio), ffi = fi.toLocaleDateString("es-MX", {day: "numeric", month: "short"}) + " " + fi.toLocaleTimeString("es-MX", {hour: "2-digit", minute: "2-digit"});
-  abreHoja('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Inventario fisico Monterrey ' + ff.replace(/[\/:]/g, ".") + ' · HandyMan</title><style>' +
+    '</td><td><div class="k num">' + esc(c) + '</div><div class="d">' + esc(V.items[c].desc || "") + '</div></td>' +
+    '<td class="pz num">' + V.items[c].n + '</td></tr>').join("");
+  const fmt = x => { const d = new Date(x); return d.toLocaleDateString("es-MX", {day: "numeric", month: "short", year: "numeric"}) + " " + d.toLocaleTimeString("es-MX", {hour: "2-digit", minute: "2-digit"}); };
+  const ff = fmt(V.fin), ffi = V.inicio ? fmt(V.inicio) : "—";
+  abreHoja('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Inventario fisico Monterrey ' + ff.replace(/[\/:]/g, ".") + ' #' + V.id + ' · HandyMan</title><style>' +
     "body{font:14px/1.4 -apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1c1917;margin:24px}" +
     "h1{font-size:22px;margin:0}h1 small{font-weight:400;font-size:13px;color:#777;display:block;margin-top:2px}" +
     ".enc{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:2.5px solid #1c1917;padding-bottom:10px;margin-bottom:4px}" +
@@ -774,13 +929,15 @@ function pdfInventario() {
     "tr{break-inside:avoid}" +
     '</style></head><body>' +
     '<button class="boton" onclick="print()">Imprimir / Guardar PDF</button>' +
-    '<div class="enc"><h1>Inventario físico · tienda Monterrey<small>Conteo pieza por pieza con escáner · empezado el ' + ffi + ' · hoja impresa el ' + ff + '</small></h1><span class="logo">HANDYMAN</span></div>' +
+    '<div class="enc"><h1>Inventario físico · tienda Monterrey · #' + V.id + '<small>Conteo pieza por pieza con escáner · empezado el ' + ffi + ' · terminado el ' + ff + (V.correo ? ' · ' + esc(V.correo) : '') + '</small></h1><span class="logo">HANDYMAN</span></div>' +
     '<p style="margin:6px 0 10px;font-size:13px;color:#555"><b>' + t.claves + (t.claves === 1 ? " clave" : " claves") + " · " + t.piezas + (t.piezas === 1 ? " pieza contada" : " piezas contadas") + ".</b> La cantidad es lo que se escaneó físicamente en la tienda.</p>" +
     "<table>" + cuerpo + "</table>" +
     '<div class="kv" style="text-align:right;font-weight:700;padding:8px 7px">Total: ' + t.piezas + (t.piezas === 1 ? " pieza" : " piezas") + "</div>" +
     '<div class="pie"><div>Contó (nombre y firma)</div><div>Revisó</div><div>Fecha</div></div>' +
     "</body></html>");
 }
+// al abrir: si en este navegador había un conteo a medias, se sigue ahí mismo
+(function () { const l = invLocal(); if (l) { if (!l.id) { l.id = invNuevoId(); l.nube = false; } INV = l; invGuardarLocal(); invDescripciones().then(() => pintarInventario()); } })();
 pintarInventario();
 
 
