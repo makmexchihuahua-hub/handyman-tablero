@@ -766,7 +766,7 @@ async function invCargarLista(mas) {
     const desde = mas ? INV_LISTA.historial.length : 0;
     const [b, h] = await Promise.all([
       mas ? Promise.resolve(INV_LISTA.borradores) : q("inventario_borrador", "select=id,inicio,claves,piezas,disp,correo,actualizado&order=actualizado.desc"),
-      q("inventario", "select=id,inicio,fin,correo,claves,piezas&order=fin.desc&limit=26&offset=" + desde, {unaPagina: true})]);
+      q("inventario", "select=id,inicio,fin,correo,claves,piezas&order=fin.desc,id.desc&limit=26&offset=" + desde, {unaPagina: true})]);
     INV_LISTA.borradores = b;
     INV_LISTA.historial = (mas ? INV_LISTA.historial : []).concat(h.slice(0, 25));
     INV_LISTA.mas = h.length > 25; INV_LISTA.error = null;
@@ -1235,7 +1235,7 @@ async function rLee(tabla, parametros) {
 function rConsultaVentas() {
   if (RANGO.a < hoyStr() && D.rangoCargado === rLlaveRango()) return Promise.resolve(D.ventasHoy);  // el pasado no cambia
   const sel = "select=suc,ven_id,fecha,total,descuento,status,comprobante,renglones,piezas";
-  const filtro = "&fecha=gte." + RANGO.de + "T00:00:00&fecha=lte." + RANGO.a + "T23:59:59.999&order=fecha.desc";
+  const filtro = "&fecha=gte." + RANGO.de + "T00:00:00&fecha=lte." + RANGO.a + "T23:59:59.999&order=fecha.desc,suc,ven_id";   // orden único: sin empates en los cortes de 1000
   return rLee("sicar_venta", sel + (sinCliente ? "" : ",cli_id") + filtro)
     .catch(e => { if (!sinCliente && /cli_id/.test(e.message)) { sinCliente = true; return rLee("sicar_venta", sel + filtro); } throw e; });
 }
@@ -1352,7 +1352,7 @@ async function calcularRojos() {
     const det = {};
     for (const [suc, ids] of Object.entries(porSuc)) {           // ¡ven_id se repite entre sucursales! siempre por sucursal
       for (let i = 0; i < ids.length; i += 40) {
-        (await rLee("sicar_venta_detalle", "select=ven_id,clave,cantidad,importe,borrado&suc=eq." + suc + "&ven_id=in." + enLista(ids.slice(i, i + 40)) + "&order=ven_id"))
+        (await rLee("sicar_venta_detalle", "select=ven_id,clave,cantidad,importe,borrado&suc=eq." + suc + "&ven_id=in." + enLista(ids.slice(i, i + 40)) + "&order=ven_id,orden,clave"))
           .forEach(d => (det[suc + ":" + d.ven_id] = det[suc + ":" + d.ven_id] || []).push(d));
       }
     }
