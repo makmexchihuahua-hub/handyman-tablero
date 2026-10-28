@@ -190,7 +190,7 @@ main{max-width:1240px;margin:0 auto;padding:14px var(--gutter) 0}
 h4{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.3px;color:var(--ink-2);margin:16px 0 4px}
 
 /* navegación móvil */
-nav{position:fixed;left:0;right:0;bottom:0;height:calc(var(--nav) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);z-index:10}
+nav{position:fixed;left:0;right:0;bottom:0;height:calc(var(--nav) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);z-index:10}
 nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11.5px;color:var(--ink-3);position:relative}
 nav button.sel{color:var(--accent)}
 nav button svg{width:22px;height:22px}
@@ -310,9 +310,11 @@ nav button .cnt{position:absolute;top:8px;right:calc(50% - 24px);background:var(
 
 /* compra · mercancía propia de HandyMan */
 .cpNota{font-size:12.5px;color:var(--ink-3);margin:-4px 2px 10px}
-#cpSug{position:relative}
-#cpBuscar{font-size:16px}
-#cpSugLista{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:15;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;max-height:340px;overflow:auto;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+#cpSug,#vpSug{position:relative}
+#cpBuscar,#vpBuscar{font-size:16px}
+#cpSugLista,#vpSugLista{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:15;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;max-height:340px;overflow:auto;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+#vpMarcador{margin-bottom:12px}
+.cpImp{font-family:var(--display);font-weight:700;font-size:15px;text-align:right}
 .cpTit{font-family:var(--display);font-weight:600;font-size:15px;margin:16px 2px 6px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .cpTit small{font-family:var(--body);font-weight:400;font-size:12px;color:var(--ink-3)}
 .cpfila{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:9px 12px;border-top:1px solid var(--line);align-items:center}
@@ -437,6 +439,20 @@ nav button .cnt{position:absolute;top:8px;right:calc(50% - 24px);background:var(
     <div class="cpTit">Últimos movimientos</div>
     <div class="lista" id="cpMov"></div>
   </section>
+
+  <section class="panel" id="p-ventahm">
+    <h2>Ventas propiedad HandyMan <small id="vpResumen"></small></h2>
+    <p class="cpNota">SOLO ventas de mercancía <b>propiedad de HandyMan</b> (del módulo Compra). Las ventas de mercancía
+      de MakMex se cobran en SICAR como siempre y salen en la pestaña Ventas; este marcador es independiente.</p>
+    <div class="marcador" id="vpMarcador"></div>
+    <div id="vpSug">
+      <input id="vpBuscar" placeholder="Registrar venta: busca en el inventario propio… (clave o nombre)" autocomplete="off" autocorrect="off" spellcheck="false">
+      <div id="vpSugLista" class="hidden"></div>
+    </div>
+    <div id="vpForma"></div>
+    <div class="cpTit">Ventas propias del mes</div>
+    <div class="lista" id="vpLista"></div>
+  </section>
 </main>
 
 <nav id="nav">
@@ -445,6 +461,7 @@ nav button .cnt{position:absolute;top:8px;right:calc(50% - 24px);background:var(
   <button data-p="inventario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6v12M8 6v12M11 6v12M14 6v12M17 6v12M20 6v12"/></svg>Inventario</button>
   <button data-p="cotizar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3h8l4 4v14H4V3h4zM15 3v5h5"/><path d="M8 12h8M8 16h5"/></svg>Cotizar</button>
   <button data-p="compra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 7h12l1.2 13H4.8L6 7z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg>Compra</button>
+  <button data-p="ventahm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h4"/></svg>Venta HM</button>
 </nav>
 </div>
 
@@ -711,7 +728,8 @@ function visDetalle() {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) visCargar(); });
 
 /* ---------------- compra · mercancía propia de HandyMan (7_compra_handyman.sql) ---------------- */
-const CP = {ex: null, mov: null, sel: null, abierto: null, error: "", mandando: false, cuando: 0, cargando: false};
+const CP = {ex: null, mov: null, vmes: null, sel: null, abierto: null, error: "", mandando: false, cuando: 0, cargando: false};
+const cpMes0 = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; };
 const cpQuien = c => esc((c || "").split("@")[0]);
 const cpFecha = s => new Date(s).toLocaleString("es-MX", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
 const cpPz = n => n + (n === 1 ? " pieza" : " piezas");
@@ -721,11 +739,12 @@ async function cpCargar(forzar) {
   CP.cargando = true;
   try {
     czCatalogo().catch(() => {});   // nombres y fotos del maestro (si no carga, el módulo sigue sin fotos)
-    const [ex, mov] = await Promise.all([
+    const [ex, mov, vmes] = await Promise.all([
       q("propio_existencia", "select=*&order=clave"),
-      q("propio_mov", "select=*&order=id.desc&limit=150", {unaPagina: true})
+      q("propio_mov", "select=*&order=id.desc&limit=150", {unaPagina: true}),
+      q("propio_mov", "select=*&tipo=eq.venta&fecha=gte." + encodeURIComponent(cpMes0().toISOString()) + "&order=id.desc", {unaPagina: true})
     ]);
-    CP.ex = ex; CP.mov = mov; CP.error = "";
+    CP.ex = ex; CP.mov = mov; CP.vmes = vmes; CP.error = "";
   } catch (e) {
     CP.error = /404|PGRST/.test(e.message) ? "falta" : e.message === "sesion" ? "Vuelve a entrar para ver el inventario propio." : e.message;
   }
@@ -734,11 +753,13 @@ async function cpCargar(forzar) {
 }
 function cpPinta() {
   if (CP.error === "falta") {
-    $("#cpExist").innerHTML = '<div class="cpVacio">Falta correr <b>7_compra_handyman.sql</b> en Supabase; después recarga el tablero.</div>';
+    const aviso = '<div class="cpVacio">Falta correr <b>7_compra_handyman.sql</b> en Supabase; después recarga el tablero.</div>';
+    $("#cpExist").innerHTML = aviso; $("#vpLista").innerHTML = aviso;
     $("#cpMov").innerHTML = ""; $("#cpResumen").textContent = ""; $("#cpVendidoMes").textContent = ""; $("#cpAlta").innerHTML = "";
+    $("#vpMarcador").innerHTML = ""; $("#vpForma").innerHTML = ""; $("#vpResumen").textContent = "";
     return;
   }
-  if (CP.error) { $("#cpExist").innerHTML = '<div class="cpVacio">' + esc(CP.error) + '</div>'; $("#cpMov").innerHTML = ""; return; }
+  if (CP.error) { $("#cpExist").innerHTML = '<div class="cpVacio">' + esc(CP.error) + '</div>'; $("#cpMov").innerHTML = ""; $("#vpLista").innerHTML = ""; $("#vpMarcador").innerHTML = ""; return; }
   if (!CP.ex) return;
   const tot = CP.ex.reduce((a, e) => a + e.piezas, 0);
   $("#cpResumen").textContent = CP.ex.length ? CP.ex.length + (CP.ex.length === 1 ? " clave · " : " claves · ") + cpPz(tot) : "sin mercancía propia";
@@ -747,8 +768,9 @@ function cpPinta() {
   for (const m of CP.mov) if (m.tipo === "venta" && new Date(m.fecha) >= mes) { vMes += Number(m.precio || 0) * (-m.piezas); vPz += -m.piezas; }
   $("#cpVendidoMes").textContent = vPz ? "vendido este mes: " + pesos(vMes) + " (" + cpPz(vPz) + ")" : "";
   cpPintaAlta();
+  vpPinta();
   $("#cpExist").innerHTML = CP.ex.length ? CP.ex.map(e => {
-    const ab = CP.abierto && CP.abierto.clave === e.clave ? CP.abierto : null;
+    const ab = CP.abierto && !CP.abierto.vp && CP.abierto.clave === e.clave ? CP.abierto : null;
     return '<div class="cpfila">' + czFoto(e.clave) +
       '<div><div class="c1">' + esc(e.clave) + '</div><div class="c2">' + esc(e.descripcion || e.modelo) + '</div></div>' +
       '<div class="cpBtns"><span class="pz num">' + e.piezas + '</span>' +
@@ -765,11 +787,55 @@ function cpPinta() {
   }).join("") : '<div class="cpVacio">Sin movimientos.</div>';
   document.querySelectorAll("[data-cpa]").forEach(b => b.addEventListener("click", () => {
     const [tipo, clave] = b.dataset.cpa.split(/:(.+)/);
-    CP.abierto = CP.abierto && CP.abierto.clave === clave && CP.abierto.tipo === tipo ? null : {clave, tipo};
+    CP.abierto = CP.abierto && CP.abierto.clave === clave && CP.abierto.tipo === tipo && !CP.abierto.vp ? null : {clave, tipo};
     CP.sel = null; cpPinta();
     const inp = $("#cpPzas"); if (inp) inp.focus();
   }));
   cpAmarra();
+}
+/* ---- panel Venta HM: marcador y lista SOLO de ventas de mercancía propia ---- */
+function vpPinta() {
+  const mc = $("#vpMarcador"); if (!mc) return;
+  const vm = CP.vmes || [];
+  const hoy0 = new Date(); hoy0.setHours(0, 0, 0, 0);
+  let tHoy = 0, pzHoy = 0, nHoy = 0, tMes = 0, pzMes = 0;
+  for (const m of vm) {
+    const imp = Number(m.precio || 0) * (-m.piezas);
+    tMes += imp; pzMes += -m.piezas;
+    if (new Date(m.fecha) >= hoy0) { tHoy += imp; pzHoy += -m.piezas; nHoy += 1; }
+  }
+  const vta = n => n + (n === 1 ? " venta" : " ventas");
+  mc.innerHTML =
+    '<div class="tile num"><div class="n"><span>Hoy</span></div><div class="t' + (tHoy ? "" : " cero") + '">' + pesos(tHoy) + '</div><div class="s"><b>' + vta(nHoy) + '</b> propias</div></div>' +
+    '<div class="tile num"><div class="n"><span>Piezas hoy</span></div><div class="t' + (pzHoy ? "" : " cero") + '">' + pzHoy + '</div><div class="s">propiedad HandyMan</div></div>' +
+    '<div class="tile num"><div class="n"><span>Mes</span></div><div class="t' + (tMes ? "" : " cero") + '">' + pesos(tMes) + '</div><div class="s">en <b>' + vta(vm.length) + '</b></div></div>' +
+    '<div class="tile num"><div class="n"><span>Piezas del mes</span></div><div class="t' + (pzMes ? "" : " cero") + '">' + pzMes + '</div><div class="s">propiedad HandyMan</div></div>';
+  $("#vpResumen").textContent = vm.length ? vta(vm.length) + " este mes · " + pesos(tMes) : "sin ventas propias este mes";
+  $("#vpLista").innerHTML = vm.length ? vm.map(m => '<div class="cpfila">' + czFoto(m.clave) +
+    '<div><div class="c1">' + esc(m.clave) + '</div><div class="c2">' + esc(m.descripcion || m.modelo) + (m.nota ? ' · ' + esc(m.nota) : '') + '</div></div>' +
+    '<div><div class="cpImp num">' + pesos(Number(m.precio || 0) * (-m.piezas)) + '</div><div class="cpQuien" style="text-align:right">' + (-m.piezas) + ' × ' + pesos(m.precio || 0) + '<br>' + cpFecha(m.fecha) + ' · ' + cpQuien(m.correo) + '</div></div></div>').join("")
+    : '<div class="cpVacio">Sin ventas propias este mes. Busca arriba una clave del inventario propio para registrar la primera.</div>';
+  const ab = CP.abierto && CP.abierto.vp ? CP.abierto : null;
+  const e = ab && CP.ex ? CP.ex.find(x => x.clave === ab.clave) : null;
+  $("#vpForma").innerHTML = e ? cpFormaHtml(e, "venta") : "";
+}
+function vpBusca(v) {
+  v = (v || "").trim().toLowerCase();
+  if (!CP.ex || v.length < 2) return [];
+  return CP.ex.filter(e => e.piezas > 0 && (e.clave + " " + e.descripcion + " " + e.modelo).toLowerCase().includes(v)).slice(0, 30);
+}
+function vpPintaSug(res) {
+  const el = $("#vpSugLista");
+  if (!res.length) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+  el.innerHTML = res.map((e, i) => '<button type="button" class="czsug" data-vp="' + i + '">' + czFoto(e.clave) +
+    '<div><div class="s1">' + esc(e.clave) + '</div><div class="s2">' + esc(e.descripcion || e.modelo) + '</div></div>' +
+    '<div class="sp num">' + e.piezas + '<small>' + (e.piezas === 1 ? "pieza propia" : "piezas propias") + '</small></div></button>').join("");
+  el.classList.remove("hidden");
+  el.querySelectorAll("[data-vp]").forEach(b => b.addEventListener("click", () => {
+    CP.abierto = {clave: res[+b.dataset.vp].clave, tipo: "venta", vp: 1}; CP.sel = null;
+    $("#vpBuscar").value = ""; vpPintaSug([]); cpPinta();
+    const inp = $("#cpPzas"); if (inp) inp.focus();
+  }));
 }
 function cpFormaHtml(e, tipo) {
   const cat = (CZCAT || []).find(x => x.sku === e.clave);
@@ -893,9 +959,13 @@ const cpBusca = v => czBusca(v).filter(p => !p.kit);   // piezas con calificaci�
     if (!CZCAT) { czCatalogo().then(() => cpPintaSug(cpBusca(b.value))).catch(() => {}); return; }
     cpPintaSug(cpBusca(b.value));
   });
-  document.addEventListener("click", ev => { if (!ev.target.closest("#cpSug")) cpPintaSug([]); });
+  document.addEventListener("click", ev => { if (!ev.target.closest("#cpSug")) cpPintaSug([]); if (!ev.target.closest("#vpSug")) vpPintaSug([]); });
   $("#cpPdf").addEventListener("click", cpPdf);
+  const vb = $("#vpBuscar");
+  vb.addEventListener("focus", () => { if (!CP.ex) cpCargar(true); else vpPintaSug(vpBusca(vb.value)); });
+  vb.addEventListener("input", () => vpPintaSug(vpBusca(vb.value)));
   document.querySelector('#nav [data-p="compra"]').addEventListener("click", () => { CP.sel = null; CP.abierto = null; cpCargar(true); });
+  document.querySelector('#nav [data-p="ventahm"]').addEventListener("click", () => { CP.sel = null; CP.abierto = null; cpCargar(true); });
 }
 
 /* ---------------- traspasos en curso ---------------- */
