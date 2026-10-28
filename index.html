@@ -190,7 +190,7 @@ main{max-width:1240px;margin:0 auto;padding:14px var(--gutter) 0}
 h4{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.3px;color:var(--ink-2);margin:16px 0 4px}
 
 /* navegación móvil */
-nav{position:fixed;left:0;right:0;bottom:0;height:calc(var(--nav) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);z-index:10}
+nav{position:fixed;left:0;right:0;bottom:0;height:calc(var(--nav) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);z-index:10}
 nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11.5px;color:var(--ink-3);position:relative}
 nav button.sel{color:var(--accent)}
 nav button svg{width:22px;height:22px}
@@ -307,6 +307,35 @@ nav button .cnt{position:absolute;top:8px;right:calc(50% - 24px);background:var(
 .visDia .bar{height:10px;border-radius:5px;background:var(--accent);min-width:2px}
 .visDia.cab{border-top:0;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.4px}
 .visDia span.num{text-align:right}
+
+/* compra · mercancía propia de HandyMan */
+.cpNota{font-size:12.5px;color:var(--ink-3);margin:-4px 2px 10px}
+#cpSug{position:relative}
+#cpBuscar{font-size:16px}
+#cpSugLista{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:15;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;max-height:340px;overflow:auto;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+.cpTit{font-family:var(--display);font-weight:600;font-size:15px;margin:16px 2px 6px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cpTit small{font-family:var(--body);font-weight:400;font-size:12px;color:var(--ink-3)}
+.cpfila{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:9px 12px;border-top:1px solid var(--line);align-items:center}
+.cpfila:first-child{border-top:0}
+.cpfila .c1{font-family:var(--display);font-weight:600;font-size:15px}
+.cpfila .c2{font-size:12px;color:var(--ink-3)}
+.cpfila .pz{font-family:var(--display);font-weight:700;font-size:18px;text-align:right;min-width:40px}
+.cpBtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.cpBtns button{border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer}
+.cpBtns button:hover{border-color:var(--accent)}
+.cpBtns button.vende{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.cpForma{grid-column:1/-1;border:1px solid var(--line-2);border-radius:10px;padding:10px;margin-top:4px;background:var(--surface-2)}
+.cpForma .campos{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px}
+.cpForma label{display:block;font-size:11px;color:var(--ink-3);margin-bottom:3px}
+.cpForma input{width:104px;font-size:16px}
+.cpForma input.ancha{width:min(260px,100%)}
+.cpMal{color:var(--bad);font-size:12.5px;margin-top:6px}
+.cpChip{display:inline-block;border-radius:7px;padding:2px 7px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.cpChip.mas{background:var(--ok-soft,rgba(60,160,90,.18));color:var(--ok,#4CAF50)}
+.cpChip.menos{background:var(--accent-soft);color:var(--accent)}
+.cpChip.aj{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line-2)}
+.cpQuien{font-size:11px;color:var(--ink-3)}
+.cpVacio{padding:14px;color:var(--ink-3);font-size:13px}
 </style>
 </head>
 <body>
@@ -392,6 +421,21 @@ nav button .cnt{position:absolute;top:8px;right:calc(50% - 24px);background:var(
       <button type="button" class="pdfbtn" id="czVaciar" style="border-color:var(--bad);color:var(--bad)">Vaciar</button>
     </div>
   </section>
+
+  <section class="panel" id="p-compra">
+    <h2>Compra · mercancía propia <small id="cpResumen"></small></h2>
+    <p class="cpNota">Inventario <b>propiedad de HandyMan</b> (aparte de SICAR, cuyo inventario es de MakMex). Lo que entra aquí se suma
+      al recuadro <b>Monterrey</b> de las páginas web en unos 5 minutos. Nada se borra: una equivocación se corrige con un ajuste.</p>
+    <div id="cpSug">
+      <input id="cpBuscar" placeholder="Registrar compra: busca por clave o nombre… (ej. 2904-20 o atornillador)" autocomplete="off" autocorrect="off" spellcheck="false">
+      <div id="cpSugLista" class="hidden"></div>
+    </div>
+    <div id="cpAlta"></div>
+    <div class="cpTit">Existencias propias <small id="cpVendidoMes"></small></div>
+    <div class="lista" id="cpExist"></div>
+    <div class="cpTit">Últimos movimientos</div>
+    <div class="lista" id="cpMov"></div>
+  </section>
 </main>
 
 <nav id="nav">
@@ -399,6 +443,7 @@ nav button .cnt{position:absolute;top:8px;right:calc(50% - 24px);background:var(
   <button data-p="traspasos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h13l-3-3m3 3-3 3M20 16H7l3-3m-3 3 3 3"/></svg>En camino<span class="cnt hidden" id="cntTras"></span></button>
   <button data-p="inventario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6v12M8 6v12M11 6v12M14 6v12M17 6v12M20 6v12"/></svg>Inventario</button>
   <button data-p="cotizar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3h8l4 4v14H4V3h4zM15 3v5h5"/><path d="M8 12h8M8 16h5"/></svg>Cotizar</button>
+  <button data-p="compra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 7h12l1.2 13H4.8L6 7z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg>Compra</button>
 </nav>
 </div>
 
@@ -561,7 +606,7 @@ function mostrarPanel(p) {
 }
 
 /* ---------------- pintado ---------------- */
-function pintarTodo() { visCargar(); pintarEstado(); pintarVentas(); pintarTraspasos(); }
+function pintarTodo() { visCargar(); cpCargar(); pintarEstado(); pintarVentas(); pintarTraspasos(); }
 
 function pintarEstado() {
   const ahora = Date.now(); const avisos = []; const html = [];
@@ -663,6 +708,158 @@ function visDetalle() {
   if (typeof pdfCajon !== "undefined") { pdfCajon = null; $("#btnPdfCajon").classList.add("hidden"); }
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) visCargar(); });
+
+/* ---------------- compra · mercancía propia de HandyMan (7_compra_handyman.sql) ---------------- */
+const CP = {ex: null, mov: null, sel: null, abierto: null, error: "", mandando: false, cuando: 0, cargando: false};
+const cpQuien = c => esc((c || "").split("@")[0]);
+const cpFecha = s => new Date(s).toLocaleString("es-MX", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+const cpPz = n => n + (n === 1 ? " pieza" : " piezas");
+async function cpCargar(forzar) {
+  // en escritorio lo llama pintarTodo cada minuto: con freno, y sin pisar una forma abierta
+  if (CP.cargando || (!forzar && (CP.sel || CP.abierto || Date.now() - CP.cuando < 60000))) return;
+  CP.cargando = true;
+  try {
+    czCatalogo().catch(() => {});   // nombres y fotos del maestro (si no carga, el módulo sigue sin fotos)
+    const [ex, mov] = await Promise.all([
+      q("propio_existencia", "select=*&order=clave"),
+      q("propio_mov", "select=*&order=id.desc&limit=150", {unaPagina: true})
+    ]);
+    CP.ex = ex; CP.mov = mov; CP.error = "";
+  } catch (e) {
+    CP.error = /404|PGRST/.test(e.message) ? "falta" : e.message === "sesion" ? "Vuelve a entrar para ver el inventario propio." : e.message;
+  }
+  CP.cuando = Date.now(); CP.cargando = false;
+  cpPinta();
+}
+function cpPinta() {
+  if (CP.error === "falta") {
+    $("#cpExist").innerHTML = '<div class="cpVacio">Falta correr <b>7_compra_handyman.sql</b> en Supabase; después recarga el tablero.</div>';
+    $("#cpMov").innerHTML = ""; $("#cpResumen").textContent = ""; $("#cpVendidoMes").textContent = ""; $("#cpAlta").innerHTML = "";
+    return;
+  }
+  if (CP.error) { $("#cpExist").innerHTML = '<div class="cpVacio">' + esc(CP.error) + '</div>'; $("#cpMov").innerHTML = ""; return; }
+  if (!CP.ex) return;
+  const tot = CP.ex.reduce((a, e) => a + e.piezas, 0);
+  $("#cpResumen").textContent = CP.ex.length ? CP.ex.length + (CP.ex.length === 1 ? " clave · " : " claves · ") + cpPz(tot) : "sin mercancía propia";
+  const mes = new Date(); mes.setDate(1); mes.setHours(0, 0, 0, 0);
+  let vMes = 0, vPz = 0;
+  for (const m of CP.mov) if (m.tipo === "venta" && new Date(m.fecha) >= mes) { vMes += Number(m.precio || 0) * (-m.piezas); vPz += -m.piezas; }
+  $("#cpVendidoMes").textContent = vPz ? "vendido este mes: " + pesos(vMes) + " (" + cpPz(vPz) + ")" : "";
+  cpPintaAlta();
+  $("#cpExist").innerHTML = CP.ex.length ? CP.ex.map(e => {
+    const ab = CP.abierto && CP.abierto.clave === e.clave ? CP.abierto : null;
+    return '<div class="cpfila">' + czFoto(e.clave) +
+      '<div><div class="c1">' + esc(e.clave) + '</div><div class="c2">' + esc(e.descripcion || e.modelo) + '</div></div>' +
+      '<div class="cpBtns"><span class="pz num">' + e.piezas + '</span>' +
+      '<button type="button" class="vende" data-cpa="venta:' + esc(e.clave) + '">Vender</button>' +
+      '<button type="button" data-cpa="ajuste:' + esc(e.clave) + '">Ajustar</button></div>' +
+      (ab ? cpFormaHtml(e, ab.tipo) : "") + '</div>';
+  }).join("") : '<div class="cpVacio">Sin mercancía propia todavía. Busca arriba la clave para registrar la primera compra.</div>';
+  $("#cpMov").innerHTML = CP.mov.length ? CP.mov.map(m => {
+    const chip = m.tipo === "compra" ? '<span class="cpChip mas">+' + m.piezas + '</span>'
+      : m.tipo === "venta" ? '<span class="cpChip menos">−' + (-m.piezas) + ' · ' + pesos(m.precio || 0) + '</span>'
+      : '<span class="cpChip aj">ajuste ' + (m.piezas > 0 ? "+" : "") + m.piezas + '</span>';
+    return '<div class="cpfila"><div>' + chip + '</div><div><div class="c1">' + esc(m.clave) + '</div><div class="c2">' +
+      esc(m.nota || m.descripcion || "") + '</div></div><div class="cpQuien">' + cpFecha(m.fecha) + '<br>' + cpQuien(m.correo) + '</div></div>';
+  }).join("") : '<div class="cpVacio">Sin movimientos.</div>';
+  document.querySelectorAll("[data-cpa]").forEach(b => b.addEventListener("click", () => {
+    const [tipo, clave] = b.dataset.cpa.split(/:(.+)/);
+    CP.abierto = CP.abierto && CP.abierto.clave === clave && CP.abierto.tipo === tipo ? null : {clave, tipo};
+    CP.sel = null; cpPinta();
+    const inp = $("#cpPzas"); if (inp) inp.focus();
+  }));
+  cpAmarra();
+}
+function cpFormaHtml(e, tipo) {
+  const cat = (CZCAT || []).find(x => x.sku === e.clave);
+  const precio = cat && cat.p1 ? Number(cat.p1) : "";
+  if (tipo === "venta") return '<div class="cpForma"><b>Vender ' + esc(e.clave) + '</b> — propiedad de HandyMan (no va a SICAR)' +
+    '<div class="campos"><div><label>Piezas (hay ' + e.piezas + ')</label><input id="cpPzas" type="number" min="1" max="' + e.piezas + '" value="1" inputmode="numeric"></div>' +
+    '<div><label>Precio por pieza $</label><input id="cpPrecio" type="number" min="0" step="any" value="' + precio + '" inputmode="decimal"></div>' +
+    '<div style="flex:1;min-width:160px"><label>Nota (opcional)</label><input id="cpNota" class="ancha" placeholder="cliente, folio, etc."></div>' +
+    '<button type="button" class="pdfbtn" id="cpConfirma">Registrar venta</button></div><div class="cpMal" id="cpMal"></div></div>';
+  return '<div class="cpForma"><b>Ajustar ' + esc(e.clave) + '</b> — corrige la existencia propia (hay ' + e.piezas + ')' +
+    '<div class="campos"><div><label>Piezas (+ entra / − sale)</label><input id="cpPzas" type="number" min="-999" max="999" value="-1" inputmode="numeric"></div>' +
+    '<div style="flex:1;min-width:200px"><label>Nota (obligatoria: por qué)</label><input id="cpNota" class="ancha" placeholder="se contó mal, se regresó, etc."></div>' +
+    '<button type="button" class="pdfbtn" id="cpConfirma">Registrar ajuste</button></div><div class="cpMal" id="cpMal"></div></div>';
+}
+function cpPintaAlta() {
+  const p = CP.sel;
+  $("#cpAlta").innerHTML = p ? '<div class="cpForma"><div class="cpfila" style="border:0;padding:0">' + czFoto(p.sku) +
+    '<div><div class="c1">' + esc(p.sku) + '</div><div class="c2">' + esc(p.name || p.model) + (p.p1 ? ' · lista ' + pesos(p.p1) : '') + '</div></div><div></div></div>' +
+    '<div class="campos"><div><label>Piezas compradas</label><input id="cpAltaPzas" type="number" min="1" max="999" value="1" inputmode="numeric"></div>' +
+    '<button type="button" class="pdfbtn" id="cpAltaOk">Registrar compra</button>' +
+    '<button type="button" class="pdfbtn" id="cpAltaNo" style="border-color:var(--line-2)">Cancelar</button></div><div class="cpMal" id="cpAltaMal"></div></div>' : "";
+  cpAmarra();
+}
+async function cpManda(args, idMal) {
+  if (CP.mandando) return;
+  CP.mandando = true;
+  const mal = $(idMal); if (mal) mal.textContent = "";
+  try {
+    const r = await hmRpc("propio_registrar", args);
+    if (r && r.error) { if (mal) mal.textContent = r.error; return; }
+    CP.sel = null; CP.abierto = null;
+    const b = $("#cpBuscar"); if (b) { b.value = ""; cpPintaSug([]); }
+    await cpCargar(true);
+  } catch (e) {
+    if (mal) mal.textContent = e.message === "sesion" ? "Vuelve a entrar (la sesión venció)." : e.message;
+  } finally { CP.mandando = false; }
+}
+function cpAmarra() {
+  const ok = $("#cpAltaOk");
+  if (ok && !ok.dataset.ya) { ok.dataset.ya = 1; ok.addEventListener("click", () => {
+    const n = Math.round(Number($("#cpAltaPzas").value));
+    if (!(n >= 1 && n <= 999)) { $("#cpAltaMal").textContent = "Piezas: de 1 a 999."; return; }
+    const p = CP.sel;
+    cpManda({p_tipo: "compra", p_clave: p.sku, p_modelo: p.model, p_calificacion: p.grade || "", p_descripcion: p.name || p.model,
+             p_piezas: n, p_precio: null, p_nota: ""}, "#cpAltaMal");
+  }); }
+  const no = $("#cpAltaNo");
+  if (no && !no.dataset.ya) { no.dataset.ya = 1; no.addEventListener("click", () => { CP.sel = null; cpPintaAlta(); }); }
+  const c = $("#cpConfirma");
+  if (c && !c.dataset.ya) { c.dataset.ya = 1; c.addEventListener("click", () => {
+    const ab = CP.abierto; if (!ab) return;
+    const e = CP.ex.find(x => x.clave === ab.clave); if (!e) return;
+    const n = Math.round(Number($("#cpPzas").value)), nota = ($("#cpNota").value || "").trim();
+    if (ab.tipo === "venta") {
+      const precio = Number($("#cpPrecio").value);
+      if (!(n >= 1 && n <= e.piezas)) { $("#cpMal").textContent = "Piezas: de 1 a " + e.piezas + "."; return; }
+      if (!(precio >= 0) || $("#cpPrecio").value === "") { $("#cpMal").textContent = "Falta el precio de venta."; return; }
+      cpManda({p_tipo: "venta", p_clave: e.clave, p_modelo: e.modelo, p_calificacion: e.calificacion, p_descripcion: e.descripcion,
+               p_piezas: n, p_precio: precio, p_nota: nota}, "#cpMal");
+    } else {
+      if (!n || n < -999 || n > 999) { $("#cpMal").textContent = "El ajuste va de -999 a 999 y no puede ser 0."; return; }
+      if (!nota) { $("#cpMal").textContent = "El ajuste lleva nota (por qué se corrige)."; return; }
+      cpManda({p_tipo: "ajuste", p_clave: e.clave, p_modelo: e.modelo, p_calificacion: e.calificacion, p_descripcion: e.descripcion,
+               p_piezas: n, p_precio: null, p_nota: nota}, "#cpMal");
+    }
+  }); }
+}
+function cpPintaSug(res) {
+  const el = $("#cpSugLista");
+  if (!res.length) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+  el.innerHTML = res.map((p, i) => '<button type="button" class="czsug" data-cp="' + i + '">' + czFoto(p.sku) +
+    '<div><div class="s1">' + esc(p.sku) + '</div><div class="s2">' + esc(p.name || p.model) + '</div></div>' +
+    '<div class="sp num">' + (p.p1 ? pesos(p.p1) : "—") + '<small>' + (p.grade ? "calificación " + p.grade : "") + '</small></div></button>').join("");
+  el.classList.remove("hidden");
+  el.querySelectorAll("[data-cp]").forEach(b => b.addEventListener("click", () => {
+    CP.sel = res[+b.dataset.cp]; CP.abierto = null;
+    $("#cpBuscar").value = ""; cpPintaSug([]); cpPintaAlta();
+    const inp = $("#cpAltaPzas"); if (inp) { inp.focus(); inp.select(); }
+  }));
+}
+const cpBusca = v => czBusca(v).filter(p => !p.kit);   // piezas con calificación; los kits no son un artículo físico
+{
+  const b = $("#cpBuscar");
+  b.addEventListener("focus", () => { czCatalogo().then(() => cpPintaSug(cpBusca(b.value))).catch(() => {}); });
+  b.addEventListener("input", () => {
+    if (!CZCAT) { czCatalogo().then(() => cpPintaSug(cpBusca(b.value))).catch(() => {}); return; }
+    cpPintaSug(cpBusca(b.value));
+  });
+  document.addEventListener("click", ev => { if (!ev.target.closest("#cpSug")) cpPintaSug([]); });
+  document.querySelector('#nav [data-p="compra"]').addEventListener("click", () => { CP.sel = null; CP.abierto = null; cpCargar(true); });
+}
 
 /* ---------------- traspasos en curso ---------------- */
 function pintarTraspasos() {
